@@ -1,0 +1,27 @@
+{
+    "files.associations": {
+        "ch57x_gpio.h": "c",
+        "cmsis_compiler.h": "c",
+        "cmsis_gcc.h": "c",
+        "ch579sfr.h": "c",
+        "stdlib.h": "c",
+        "type_traits": "c",
+        "stdint.h": "c",
+        "ch57x_clk.h": "c",
+        "ch57x_uart.h": "c",
+        "ch57x_usbdev.h": "c",
+        "ch57x_common.h": "c",
+        "stddef.h": "c",
+        "ch57x_pwr.h": "c",
+        "stdio.h": "c",
+        "cstdio": "c",
+        "*.txt": "c",
+        "mpu6050.h": "c",
+        "math.h": "c",
+        "reent.h": "c",
+        "cdefs.h": "c",
+        "time.h": "c",
+        "ch57x_timer0.h": "c"
+    }
+    // "C_Cpp.errorSquiggles": "Disabled",
+}
