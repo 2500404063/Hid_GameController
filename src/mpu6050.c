@@ -159,10 +159,10 @@ void MPU_Compute()
     MPU_Gyroscope();
     MPU_Accelerometer();
 
-    UINT16 t = (UINT16)gVal_aRX;
+    UINT16 t = (UINT16)(-gVal_aRX * 1.5f);
     pEP1_RAM_Addr[64] = *((PUINT8)&t);
     pEP1_RAM_Addr[65] = *((PUINT8)&t + 1);
-    t = (UINT16)gVal_aRY;
+    t = (UINT16)(-gVal_aRY * 5.0f);
     pEP1_RAM_Addr[66] = *((PUINT8)&t);
     pEP1_RAM_Addr[67] = *((PUINT8)&t + 1);
     DevEP1_IN_Deal(0x04);

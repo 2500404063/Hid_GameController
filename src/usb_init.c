@@ -244,8 +244,8 @@ void ENDP0_IN()
 }
 void ENDP1_OUT()
 {
+    
 }
 void ENDP1_IN()
 {
-    
 }
