@@ -3,12 +3,16 @@
 #include "math.h"
 #include "stdlib.h"
 #include "timers.h"
+#include "stdio.h"
 
-float gVal_gRX = 0;
-float gVal_gRY = 0;
-float gVal_gRZ = 0;
-float gVal_aRX = 0;
-float gVal_aRY = 0;
+static volatile float gVal_A_Roll_RAD = 0;
+static volatile float gVal_A_Pitch_RAD = 0;
+static volatile float gVal_A_Roll_ANG = 0;
+static volatile float gVal_A_Pitch_ANG = 0;
+
+static volatile float gVal_G_Roll_ANG = 0;
+static volatile float gVal_G_Pitch_ANG = 0;
+static volatile float gVal_G_Yaw_ANG = 0;
 
 void MPU_InitIIC()
 {
@@ -101,69 +105,128 @@ void MPU_Init()
     MPU_WriteByte(MPU_Addr_PWR1, 0x08);               // Wake, Internal Clock
 }
 
-void MPU_Gyroscope()
+void MPU_Compute()
 {
-    char buf[32];
     // Start to time.
-    TIMER0_Init(TIMERX_Duration_ms(50));
+    TIMER0_Init(TIMERX_Duration_ms(20)); // max: 134217ms
+
+    // Raw data of Accelerometer
+    INT16 val_AX = ((MPU_ReadByte(MPU_Addr_Accel_X_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_X_L));
+    INT16 val_AY = ((MPU_ReadByte(MPU_Addr_Accel_Y_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Y_L));
+    INT16 val_AZ = ((MPU_ReadByte(MPU_Addr_Accel_Z_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Z_L));
+
     // Raw data of Gyroscope
     INT16 val_GX = (INT16)((MPU_ReadByte(MPU_Addr_Gyro_X_H) << 8) | MPU_ReadByte(MPU_Addr_Gyro_X_L));
     INT16 val_GY = (INT16)((MPU_ReadByte(MPU_Addr_Gyro_Y_H) << 8) | MPU_ReadByte(MPU_Addr_Gyro_Y_L));
     INT16 val_GZ = (INT16)((MPU_ReadByte(MPU_Addr_Gyro_Z_H) << 8) | MPU_ReadByte(MPU_Addr_Gyro_Z_L));
     // Record time stamp
-    float t_s = TIMER0_Clock_us() * 1e-4;
+    double delta_t = TIMER0_Clock_s();
 
-    INT16 val_gRX = val_GX * 0.061037 * 0.01; // r per ms
-    INT16 val_gRY = val_GY * 0.061037 * 0.01; // r per ms
-    INT16 val_gRZ = val_GZ * 0.061037 * 0.01; // r per ms
+    // Linear filter 1 / 300
+    val_AX = (INT16)((float)val_AX * 0.003333f);
+    val_AY = (INT16)((float)val_AY * 0.003333f);
+    val_AZ = (INT16)((float)val_AZ * 0.003333f);
 
-    gVal_gRX += val_gRX * t_s;
-    gVal_gRY += val_gRY * t_s;
-    gVal_gRZ += val_gRZ * t_s;
+    // Compute roll and pitch
+    gVal_A_Roll_RAD = atanf((float)val_AY / (float)val_AZ);
+    gVal_A_Pitch_RAD = -atanf((float)val_AX / sqrtf(powf((float)val_AZ, 2.0) + powf((float)val_AY, 2.0)));
+    gVal_A_Roll_ANG = gVal_A_Roll_RAD * MPU_Rad2Ang;
+    gVal_A_Pitch_ANG = gVal_A_Pitch_RAD * MPU_Rad2Ang;
 
-    // UART1_SendString("GX:", 4);
-    // __itoa((INT16)gVal_gRX, buf, 10);
-    // UART1_SendString(buf, 0);
-    // DelsyMs(1);
+    // Convert to angle per second
+    val_GX = (INT16)((double)val_GX * 2000 / 32767);
+    val_GY = (INT16)((double)val_GY * 2000 / 32767);
+    val_GZ = (INT16)((double)val_GZ * 2000 / 32767);
 
-    // UART1_SendString("  GY:", 6);
-    // __itoa((INT16)gVal_gRY, buf, 10);
-    // UART1_SendString(buf, 0);
-    // DelsyMs(1);
+    // Compute volocity of angle for Global Coordinate
+    float val_Vroll = (float)val_GX +
+                      (float)val_GY * tanf(gVal_A_Pitch_RAD) * sinf(gVal_A_Roll_RAD) +
+                      (float)val_GZ * tanf(gVal_A_Pitch_RAD) * cosf(gVal_A_Roll_RAD);
+    float val_Vpitch = (float)val_GY * cosf(gVal_A_Roll_RAD) +
+                       (float)val_GZ * -sinf(gVal_A_Roll_RAD);
+    float val_Vyaw = (float)val_GY * sinf(gVal_A_Roll_RAD) / cosf(gVal_A_Pitch_RAD) +
+                     (float)val_GZ * cosf(gVal_A_Roll_RAD) / cosf(gVal_A_Pitch_RAD);
 
-    // UART1_SendString("  GZ:", 6);
-    // __itoa((INT16)gVal_gRZ, buf, 10);
-    // UART1_SendString(buf, 0);
-    // DelsyMs(1);
+    float delta_roll = (float)((double)val_Vroll * delta_t);
+    float delta_pitch = (float)((double)val_Vpitch * delta_t);
+    float delta_yaw = (float)((double)val_Vyaw * delta_t);
+
+    // 0.1f precision
+    delta_roll = (float)(INT32)(delta_roll * 10) / 10.0f;
+    delta_pitch = (float)(INT32)(delta_pitch * 10) / 10.0f;
+    delta_yaw = (float)(INT32)(delta_yaw * 10) / 10.0f;
+
+    // Integrate
+    gVal_G_Roll_ANG += delta_roll;
+    gVal_G_Pitch_ANG += delta_pitch;
+    gVal_G_Yaw_ANG += delta_yaw;
+
+    // Print
+    // UART1_SendString("A_Roll:", 7);
+    // PrintFloat(gVal_A_Roll_ANG, 2);
+    // UART1_SendString("    ", 4);
+    // UART1_SendString("A_Pitch:", 8);
+    // PrintFloat(gVal_A_Pitch_ANG, 2);
     // UART1_SendByte('\n');
-    // DelsyMs(50);
+
+    UART1_SendString("G_Roll:", 7);
+    // PrintINT16((INT16)gVal_G_Roll_ANG);
+    PrintFloat(gVal_G_Roll_ANG, 2);
+    UART1_SendString("    ", 4);
+    UART1_SendString("G_Pitch:", 8);
+    // PrintINT16((INT16)gVal_G_Pitch_ANG);
+    PrintFloat(gVal_G_Pitch_ANG, 2);
+    UART1_SendString("    ", 4);
+    UART1_SendString("G_Yaw:", 6);
+    // PrintINT16((INT16)gVal_G_Yaw_ANG);
+    PrintFloat(gVal_G_Yaw_ANG, 2);
+    UART1_SendByte('\n');
+
+    // UINT16 t = (UINT16)(-gVal_aRX * 1.5f);
+    // pEP1_RAM_Addr[64] = *((PUINT8)&t);
+    // pEP1_RAM_Addr[65] = *((PUINT8)&t + 1);
+    // t = (UINT16)(-gVal_aRY * 5.0f);
+    // pEP1_RAM_Addr[66] = *((PUINT8)&t);
+    // pEP1_RAM_Addr[67] = *((PUINT8)&t + 1);
+    // DevEP1_IN_Deal(0x04);
 }
 
-void MPU_Accelerometer()
+void PrintFloat(float val, UINT8 index)
 {
-    // Raw data of Accelerometer
-    INT16 val_AX = ((MPU_ReadByte(MPU_Addr_Accel_X_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_X_L));
-    INT16 val_AY = ((MPU_ReadByte(MPU_Addr_Accel_Y_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Y_L));
-    INT16 val_AZ = ((MPU_ReadByte(MPU_Addr_Accel_Z_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Z_L));
-    // Processed data of Acceleromter
-    // INT16 val_AX = (INT16)((float)(INT16)((MPU_ReadByte(MPU_Addr_Accel_X_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_X_L)) * 0.00048828125);
-    // INT16 val_AY = (INT16)((float)(INT16)((MPU_ReadByte(MPU_Addr_Accel_Y_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Y_L)) * 0.00048828125);
-    // INT16 val_AZ = (INT16)((float)(INT16)((MPU_ReadByte(MPU_Addr_Accel_Z_H) << 8) | MPU_ReadByte(MPU_Addr_Accel_Z_L)) * 0.00048828125);
-
-    gVal_aRX = acosf((float)val_AZ / sqrtf(powf((float)val_AZ, 2) + powf((float)val_AY, 2))) * 57.295773f * (val_AY < 0 ? 1.0f : -1.0f);
-    gVal_aRY = acosf((float)val_AZ / sqrtf(powf((float)val_AZ, 2) + powf((float)val_AX, 2))) * 57.295773f * (val_AX < 0 ? 1.0f : -1.0f);
+    char buf[32];
+    __itoa((INT32)val, buf, 10);
+    UART1_SendString(buf, 0);
+    DelsyMs(1);
+    UART1_SendByte('.');
+    __itoa((UINT32)((fabsf(val) - (UINT32)fabsf(val) + 1) * powf(10, (float)index)), buf, 10);
+    UART1_SendString(buf + 1, 0);
+    DelsyMs(1);
 }
 
-void MPU_Compute()
+void PrintDouble(double val, UINT8 index)
 {
-    MPU_Gyroscope();
-    MPU_Accelerometer();
+    char buf[32];
+    __itoa((INT32)val, buf, 10);
+    UART1_SendString(buf, 0);
+    DelsyMs(1);
+    UART1_SendByte('.');
+    __itoa((UINT32)((fabsf(val) - (UINT16)fabsf(val) + 1) * powf(10, (float)index)), buf, 10);
+    UART1_SendString(buf + 1, 0);
+    DelsyMs(1);
+}
 
-    UINT16 t = (UINT16)(-gVal_aRX * 1.5f);
-    pEP1_RAM_Addr[64] = *((PUINT8)&t);
-    pEP1_RAM_Addr[65] = *((PUINT8)&t + 1);
-    t = (UINT16)(-gVal_aRY * 5.0f);
-    pEP1_RAM_Addr[66] = *((PUINT8)&t);
-    pEP1_RAM_Addr[67] = *((PUINT8)&t + 1);
-    DevEP1_IN_Deal(0x04);
+void PrintINT16(INT16 val)
+{
+    char buf[32];
+    __itoa((INT16)val, buf, 10);
+    UART1_SendString(buf, 0);
+    DelsyMs(1);
+}
+
+void PrintINT32(INT32 val)
+{
+    char buf[32];
+    __itoa(val, buf, 10);
+    UART1_SendString(buf, 0);
+    DelsyMs(1);
 }

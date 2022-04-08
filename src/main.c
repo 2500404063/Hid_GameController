@@ -35,6 +35,7 @@ int main()
 
     NVIC_EnableIRQ(USB_IRQn);
     GPIOB_SetBits(GPIO_Pin_0);
+    DelsyMs(2000);
     while (1)
     {
         MPU_Compute();

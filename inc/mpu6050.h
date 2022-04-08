@@ -4,6 +4,8 @@
 #include "CH579SFR.h"
 #include "CH57x_common.h"
 
+#define MPU_Rad2Ang 57.295773f
+
 #define MPU_Address 0x68
 #define MPU_Addr_X_TEST 0x0D
 #define MPU_Addr_Y_TEST 0x0E
@@ -49,7 +51,9 @@ void MPU_WriteByte(UINT8 addr, UINT8 val);
 void MPU_SelfTest();
 void MPU_Init();
 
-void MPU_Gyroscope();
-void MPU_Accelerometer();
 void MPU_Compute();
+void PrintFloat(float val, UINT8 index);
+void PrintDouble(double val, UINT8 index);
+void PrintINT16(INT16 val);
+void PrintINT32(INT32 val);
 #endif
