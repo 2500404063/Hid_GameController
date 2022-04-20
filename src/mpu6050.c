@@ -162,23 +162,19 @@ void MPU_Compute()
     gVal_G_Yaw_ANG += delta_yaw;
 
     // Print
-    // UART1_SendString("A_Roll:", 7);
-    // PrintFloat(gVal_A_Roll_ANG, 2);
-    // UART1_SendString("    ", 4);
-    // UART1_SendString("A_Pitch:", 8);
-    // PrintFloat(gVal_A_Pitch_ANG, 2);
-    // UART1_SendByte('\n');
-
+    UART1_SendString("A_Roll:", 7);
+    PrintFloat(gVal_A_Roll_ANG, 2);
+    UART1_SendString("    ", 4);
+    UART1_SendString("A_Pitch:", 8);
+    PrintFloat(gVal_A_Pitch_ANG, 2);
+    UART1_SendString("    ", 4);
     UART1_SendString("G_Roll:", 7);
-    // PrintINT16((INT16)gVal_G_Roll_ANG);
     PrintFloat(gVal_G_Roll_ANG, 2);
     UART1_SendString("    ", 4);
     UART1_SendString("G_Pitch:", 8);
-    // PrintINT16((INT16)gVal_G_Pitch_ANG);
     PrintFloat(gVal_G_Pitch_ANG, 2);
     UART1_SendString("    ", 4);
     UART1_SendString("G_Yaw:", 6);
-    // PrintINT16((INT16)gVal_G_Yaw_ANG);
     PrintFloat(gVal_G_Yaw_ANG, 2);
     UART1_SendByte('\n');
 
